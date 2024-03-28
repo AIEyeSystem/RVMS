@@ -1,0 +1,2 @@
+Name,softmax_good,softmax_usable,softmax_bad,good_sd,usable_sd,bad_sd,Prediction
+../Results/M0/images/0005.png,0.9315827,0.06729684,0.0011205102,0.06979963,0.068144284,0.0019725047,0
