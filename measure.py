@@ -3,30 +3,67 @@ import os
 import glob
 from PIL import Image,ImageFilter #Import Pillow library to load the images
 import numpy as np #Import numpy
+import matplotlib
 import matplotlib.pyplot as plt #Import matplotlib library for visualization
+# matplotlib.use('TkAgg',force=True)
 from skimage.morphology import skeletonize,square,dilation #Import functions to compute morphological operations
 import csv
+import pandas as pd
+
+
 
 import networkx as nx
-from PVBM.helpers.main_branch import remove_optic,two_main_branch,remove_optic_cup
+from PVBM.helpers.main_branch import remove_optic,two_main_branch,remove_optic_cup,mask_circle
 from PVBM.helpers.skeleton import sk_skeletonize,filter_over
 from PVBM.helpers.terminals import get_terminals_hitmiss,show_terminals
 from PVBM.helpers.vascular2graph import *
 from plantcv import plantcv as pcv
+
+
+global debug
+debug = 1
 
 # segmentation_path = "images/"+image1 #replace image1 by image2 if you want to use the second example
 def measure_single_img(img_name):
     Fundus_img_pth = os.path.join('./Results/M0/images',img_name)
     AV_segmentation_path = image1 = os.path.join('./Results/M2/artery_vein/raw/',img_name)
     optic_mask_pth = os.path.join('./Results/M2/optic_disc_cup/raw/',img_name)
+    fovea_loc_pth = os.path.join('./Results/M2/Fovea/Macular_loc.csv')
+    
+    # Load the fovea CSV file
+    df = pd.read_csv(fovea_loc_pth)
+    df.set_index('Name', inplace=True)
+    global fovea_loc
+    fovea_loc = (df.loc[img_name].values).tolist()
     AV_mask = cv2.imread(AV_segmentation_path)
     Fundus_img = cv2.imread(Fundus_img_pth)
+    optic_mask = cv2.imread(optic_mask_pth,0)
+
+    from PVBM.helpers.main_branch import optic_center
+    global optic_center_point,OD
+    optic_center_ = optic_center(optic_mask)
+    # optic_center_point,OD = optic_center(optic_mask)
+    if optic_center_ is None:
+        return None
+    else:
+        optic_center_point,OD = optic_center_
+
 
     mask_V = cv2.add(AV_mask[:,:,0],AV_mask[:,:,1])
     mask_A = cv2.add(AV_mask[:,:,2],AV_mask[:,:,1])
 
     src_mask_V = mask_V.copy()
     src_mask_A = mask_A.copy()
+
+    # mask_V = mask_circle(mask_V,optic_center_point,int(2.5*OD))
+    
+    # if debug:
+    #     combine = cv2.addWeighted(Fundus_img,0.3,AV_mask,0.7,0)
+    #     tmpmask = cv2.cvtColor(mask_V, cv2.COLOR_GRAY2BGR)
+    #     maskzone = np.where(tmpmask==0,Fundus_img,combine)
+    #     plt.imshow(maskzone)
+    #     plt.show()
+    
     # AV_segmentation_path = image1 = '/home/zack/Desktop/workspace/vessel/RETA/RAVIR/train/training_masks/IR_Case_022.png'
     # AV_mask = cv2.imread(AV_segmentation_path,0)
 
@@ -55,7 +92,7 @@ def measure_single_img(img_name):
     skel_A,segmented_img, segment_objects = pcv.morphology.prune(skel_img=skel_A, size=15)
     #### remove optic in skeleton
 
-    optic_mask = cv2.imread(optic_mask_pth,0)
+    
 
     skel_A = remove_optic(skel_A,optic_mask)
     skel_V = remove_optic(skel_V,optic_mask)
@@ -86,8 +123,8 @@ def measure_single_img(img_name):
     # b_skel_V = b_skel_V.astype(np.uint8) # must be blaack and white thin network image
     # b_skel_A = b_skel_A.astype(np.uint8)
 
-    e_points_V,i_points_V = get_terminals_hitmiss(b_skel_V)
-    e_points_A,i_points_A = get_terminals_hitmiss(b_skel_A)
+    # e_points_V,i_points_V = get_terminals_hitmiss(b_skel_V)
+    # e_points_A,i_points_A = get_terminals_hitmiss(b_skel_A)
 
     e_points_V_0,i_points_V_0 = get_terminals_hitmiss(b_skel_V_0)
     e_points_V_1,i_points_V_1 = get_terminals_hitmiss(b_skel_V_1)
@@ -101,14 +138,7 @@ def measure_single_img(img_name):
     root = None #(417,196)
     select = None
 
-    from PVBM.helpers.main_branch import optic_center
-    global optic_center_point,OD
-    optic_center_ = optic_center(optic_mask)
-    # optic_center_point,OD = optic_center(optic_mask)
-    if optic_center_ is None:
-        return None
-    else:
-        optic_center_point,OD = optic_center_
+
     # img = mh.imread(filename)
 
 
@@ -144,11 +174,11 @@ def measure_single_img(img_name):
             superposed = True
             print("image with loops detected, useless to use an older graph, constructing the graph")
             G = buildGraph(img, t_skel,root,t_e_points,t_i_points)
-            if(len(contours)>2):
-                img,t_skel,skel2,cutPoints = loopSolution(G,t_skel,img,contours,root)
-                G = buildGraph(img, t_skel,root,t_e_points,t_i_points)
-                # contour = findContour(img)
-                markCutPoints(G,cutPoints,20)
+
+            img,t_skel,skel2,cutPoints = loopSolution(G,t_skel,img,contours,root)
+            G = buildGraph(img, t_skel,root,t_e_points,t_i_points)
+            # contour = findContour(img)
+            markCutPoints(G,cutPoints,20)
         else:
             # # read in the graph from a previous run, if it exists
             # try:
@@ -164,7 +194,7 @@ def measure_single_img(img_name):
             #     # could not read the graph. Constructing it now
             #     G = buildGraph(img, t_skel,root,t_e_points,t_i_points)
             G = buildGraph(img, t_skel,root,t_e_points,t_i_points)
-
+        global width,height
         width = t_skel.shape[1]
         height = t_skel.shape[0]
 
@@ -242,9 +272,9 @@ def measure_single_img(img_name):
             except:
                 # could not read the graph. Constructing it now
                 G = buildGraph(img, t_skel,root,t_e_points,t_i_points)
-
-        width = t_skel.shape[1]
-        height = t_skel.shape[0]
+        
+        # width = t_skel.shape[1]
+        # height = t_skel.shape[0]
 
         # plt.axis((0,width,height,0))
         # plt.imshow(~img, cmap=leaf_colors, interpolation="nearest")
@@ -272,7 +302,7 @@ def measure_single_img(img_name):
 
 def save_data(G_ts,roots,img_name,filename):
     # G_t = G.copy()
-    last_trunk_nodes_Vein = []
+    last_trunk_nodes_vessel = []
 
     trunk_branch_node=[]
     trunk_branch_angle=[]
@@ -283,6 +313,7 @@ def save_data(G_ts,roots,img_name,filename):
 
     for G_t,root in zip(G_ts,roots):
         nodes = nx.dfs_preorder_nodes(G_t, root)
+        nodes = list(nodes)
         # edges = nx.dfs_edges(G_t,root)
         edges = G_t.edges()
 
@@ -296,11 +327,11 @@ def save_data(G_ts,roots,img_name,filename):
         #     for n2 in G[n]:
         #         print('n2',n2)
         order_of_root = G_t.nodes[root]['Strahler']
-        for p in nodes:
+        for n in nodes:
             # print(p)
-            if G_t.nodes[p]['Strahler']==order_of_root:
-                last_trunk_node.append(p)
-        last_trunk_nodes_Vein.append(last_trunk_node[-1])
+            if G_t.nodes[n]['Strahler']==order_of_root:
+                last_trunk_node.append(n)
+        last_trunk_nodes_vessel.append(last_trunk_node[-1])
         # for e in edges: 
         #     if G_t.edges[e[0],e[1]]['Strahler']==1:
         #             # print(G_t.edges[e[0],e[1]].keys())
@@ -309,23 +340,23 @@ def save_data(G_ts,roots,img_name,filename):
         #             print((G_t.edges[e[0],e[1]]['alpha']+G_t.edges[e[0],e[1]]['alpha_e'])*(180.0/np.pi))#*(180.0/np.pi))
         #             # print(G_t.edges[e[0],e[1]]['theta'])
 
-        nodes = nx.dfs_preorder_nodes(G_t, root) ## each time you use, need dfs
-        order_of_root = G_t.nodes[root]['Strahler']
+        # nodes = nx.dfs_preorder_nodes(G_t, root) ## each time you use, need dfs, change generator to list
+        # order_of_root = G_t.nodes[root]['Strahler']
         print("The Strahler Order of Root: ",order_of_root)
-        print('nodes:',nodes)
+        # print('nodes:',nodes)
         for n in nodes: 
             if G_t.nodes[n]['Strahler'] == order_of_root:
-                n_parent = G_t.nodes[n]['parent']
+                n_parent = G_t.nodes[n]['parent'] ### parent of root is None
                 num_branch = 0
-                branch_angle = {}
-                branch_diameter = {}
+                branch_angle = {} # the angle of n2 is the angle of parent and parent's parent.
+                branch_diameter = {} # the diameter n with parent of n
                 branch_order = []
                 for n_2 in G_t[n]: # neighbor
                     if n_2 == n_parent and n_2 is not None:
                         pp = G_t.nodes[n_2]['parent']
                         if pp is None:
                             continue
-                        branch_diameter[(*n_2,'parent')] = G_t.edges[n_2,pp]['W_mean']
+                        branch_diameter[(*n_2,'parent')] = G_t.edges[n_2,pp]['W_mean'] ## node to parent
                     # elif n_2 != n_parent and n_2 is not None and G_t.nodes[n_2]['Strahler']==(order_of_root-1): ##BiA
                     #     num_branch+=1
                     #     branch_angle[n_2] = (180.0-G_t.edges[n,n_2]['alpha_e']*(180.0/np.pi))
@@ -346,7 +377,7 @@ def save_data(G_ts,roots,img_name,filename):
                 #     # print(G_t.nodes[n_2]['parent'])
                 #     # if G_t.nodes[n_2]['Strahler'] == order_of_root:   
                 #     # if G_t.edges[n,n_2]['Strahler'] 
-            elif G_t.nodes[n]['Strahler'] == 2: ## should be 2 not order_of_root-1 ## order_of_root==4
+            elif G_t.nodes[n]['Strahler'] == 2: ## should be 2 not order_of_root-1 ## maybe order_of_root==4
                 n_parent = G_t.nodes[n]['parent']
                 num_branch = 0
                 branch_angle = {}
@@ -375,11 +406,14 @@ def save_data(G_ts,roots,img_name,filename):
         # print('all edge theta angle:',edge_branch_angle)
 
         trunk_branch_angle_different_list=[]
+        trunk_branch_angle_sum_list=[]
         trunk_branching_coeff_list = []
         for ta,td in zip(trunk_branch_angle,trunk_branch_diameter):
             angle_list = list(ta.values())
             angle_different = np.fabs(angle_list[0]-angle_list[1]) 
+            angle_sum = np.fabs(angle_list[0])+np.fabs(angle_list[1])
             trunk_branch_angle_different_list.append(angle_different)
+            trunk_branch_angle_sum_list.append(angle_sum)
             
             d = 0.0
             d0=0
@@ -396,16 +430,20 @@ def save_data(G_ts,roots,img_name,filename):
             # print(angle_different)
         if len(trunk_branch_angle_different_list)==0:
             mean_trunk_branch_angle_different = -1.0
+            mean_trunk_branch_angle_sum = -1.0
         else:
             mean_trunk_branch_angle_different = sum(trunk_branch_angle_different_list)/len(trunk_branch_angle_different_list)
+            mean_trunk_branch_angle_sum = sum(trunk_branch_angle_sum_list)/len(trunk_branch_angle_sum_list)
         if len(trunk_branching_coeff_list) == 0:
             mean_trunk_branching_coeff =-1.0
         else:
             mean_trunk_branching_coeff = sum(trunk_branching_coeff_list)/len(trunk_branching_coeff_list)
         print('Number of trunk branch,Average angle different of trunk branch: ',len(trunk_branch_angle_different_list),mean_trunk_branch_angle_different)
+        print('Number of trunk branch,Average angle sum of trunk branch: ',len(trunk_branch_angle_sum_list),mean_trunk_branch_angle_sum)
         print('Average trunk branch coefficient: ',len(trunk_branching_coeff_list),mean_trunk_branching_coeff)
 
         edge_branch_angle_different_list=[]
+        edge_branch_angle_sum_list=[]
         edge_branching_coeff_list = []
         for ta,td in zip(edge_branch_angle,edge_branch_diameter):
             # for bkey in ta.keys():
@@ -413,7 +451,9 @@ def save_data(G_ts,roots,img_name,filename):
                 # y = [bkey[1],bf[1]]
             angle_list = list(ta.values())
             angle_different = np.fabs(angle_list[0]-angle_list[1]) 
+            angle_sum = np.fabs(angle_list[0])+np.fabs(angle_list[0])
             edge_branch_angle_different_list.append(angle_different)
+            edge_branch_angle_sum_list.append(angle_sum)
             
             d = 0.0
             d0=0
@@ -429,26 +469,34 @@ def save_data(G_ts,roots,img_name,filename):
             # print(angle_different)
         if len(edge_branch_angle_different_list) == 0:
             mean_edge_branch_angle_different = -1.0
+            mean_edge_branch_angle_sum = -1.0
         else:
             mean_edge_branch_angle_different = sum(edge_branch_angle_different_list)/len(edge_branch_angle_different_list)
+            mean_edge_branch_angle_sum = sum(edge_branch_angle_sum_list)/len(edge_branch_angle_sum_list)
         if len(edge_branching_coeff_list) == 0:
             mean_edge_branching_coeff = -1.0
         else:
             mean_edge_branching_coeff = sum(edge_branching_coeff_list)/len(edge_branching_coeff_list)
         print('Number fo edge branch,Average angle different of edge branch: ',len(edge_branch_angle_different_list),mean_edge_branch_angle_different)
+        print('Number fo edge branch,Average angle sum of edge branch: ',len(edge_branch_angle_sum_list),mean_edge_branch_angle_sum)
         print('Average edge branch coefficient: ',len(edge_branching_coeff_list),mean_edge_branching_coeff)
     
-    if len(last_trunk_nodes_Vein) == 2:
-        main_vessel_angle = angle(optic_center_point,last_trunk_nodes_Vein[0],last_trunk_nodes_Vein[1])*(180.0/np.pi)
+    if len(last_trunk_nodes_vessel) == 2:
+        main_vessel_angle = angle(optic_center_point,last_trunk_nodes_vessel[0],last_trunk_nodes_vessel[1])*(180.0/np.pi)
+        fovea_loc_scalup = (fovea_loc[0]*width,fovea_loc[1]*height)
+        fovea_optic_angle1 = angle(optic_center_point,last_trunk_nodes_vessel[0],fovea_loc_scalup)*(180.0/np.pi)
+        fovea_optic_angle2 = angle(optic_center_point,last_trunk_nodes_vessel[1],fovea_loc_scalup)*(180.0/np.pi)
     else:
         main_vessel_angle = -1.0
     print("Main angle of vessel tree:",main_vessel_angle)          
-    vessel_param = [img_name,main_vessel_angle,mean_trunk_branch_angle_different,mean_trunk_branching_coeff,mean_edge_branch_angle_different,mean_edge_branching_coeff]
+    vessel_param = [img_name,main_vessel_angle,fovea_optic_angle1,fovea_optic_angle2,
+                    mean_trunk_branch_angle_different,mean_trunk_branch_angle_sum,mean_trunk_branching_coeff,
+                    mean_edge_branch_angle_different,mean_edge_branch_angle_sum,mean_edge_branching_coeff]
     writefile(filename,vessel_param)    
           
 def writefile(filename,data):
     # 使用 Python open 方法打开文件进行写入，
-    csv_header = ['ID','MainAngle','MeanTrunkBAngle','MeanTrunkBCoef','MeanEdgeBAngle','MeanEdgeBcoef']
+    csv_header = ['ID','MainAngle','FoveaOpticAngle1','FoveaOpticAngle2','MeanTrunkBAngleDiff','MeanTrunkBAngle','MeanTrunkBCoef','MeanEdgeBAngleDiff','MeanEdgeBAngle','MeanEdgeBcoef']
     filexists =  os.path.exists(filename)
     with open(filename, mode='a') as f:
         
@@ -471,7 +519,7 @@ if __name__ == '__main__':
     img_name_list = sorted(img_name_list)
     print(img_name_list)
     
-    resume_measure = True
+    resume_measure = False
     img_names_in_csv=[]
     if not resume_measure:
         import pandas as pd
@@ -479,13 +527,15 @@ if __name__ == '__main__':
             os.remove('Artery.csv')
         if os.path.exists('Vein.csv'):
             os.remove('Vein.csv') 
+
+    if resume_measure:
         img_names_in_csv = pd.read_csv('Artery.csv')['ID'].tolist()
 
         # # 提取第一列（假设第一列的列名为 'ID'）
         # id_list = df['ID'].tolist()
     for img_id,img_name in enumerate(img_name_list):
         print('the img number is: ', img_id,' img name is : ',img_name)
-        try:
+        if 1:
             if resume_measure:
                 if img_name not in img_names_in_csv:
                     measure_single_img(img_name)
@@ -495,7 +545,7 @@ if __name__ == '__main__':
                 # if(img_name == '0003441522_20200820_080825_Color_L_001.png'):
                 measure_single_img(img_name)
                 # pass
-        except:
-            continue
+        # except:
+        #     continue
 
 

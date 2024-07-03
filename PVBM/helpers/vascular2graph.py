@@ -21,7 +21,7 @@ import os.path
 import pickle
 import cv2
 import itertools
-
+import math
 
 # angle constant, and distance constant for superposition treatement
 
@@ -367,6 +367,9 @@ def maxDisk(im, p):
             # rminsq can be trusted only if all pixels at this distance are in the square
             return 2*np.sqrt(rminsq)
         R *= 2
+
+
+
 
 
 # find the point on path which crosses the circle centered on P with radius R
@@ -1148,6 +1151,64 @@ def loopSolution(G,skel,img,contours,root):
     skel  = np.ma.masked_where(skel==0, skel)
     return img,skel,skel2,cutPoints           
 
+def euclidean_distance(point1, point2):
+    return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
+# def calculate_distances_and_prune(G, root, max_distance):
+#     # Initialize distances from the root
+#     distances = {root: 0}
+#     nodes_to_visit = [root]
+
+#     while nodes_to_visit:
+#         current_node = nodes_to_visit.pop(0)
+#         current_distance = distances[current_node]
+        
+#         for neighbor in G.successors(current_node):
+#             edge_distance = euclidean_distance(current_node, neighbor)
+#             new_distance = current_distance + edge_distance
+            
+#             if neighbor not in distances or new_distance < distances[neighbor]:
+#                 distances[neighbor] = new_distance
+#                 nodes_to_visit.append(neighbor)
+    
+#     # Find nodes to remove
+#     nodes_to_remove = {node for node, dist in distances.items() if dist > max_distance}
+
+#     # Also remove all descendants of the nodes to be removed
+#     all_descendants = set()
+#     for node in nodes_to_remove:
+#         descendants = nx.descendants(G, node)
+#         all_descendants.update(descendants)
+
+#     # Union of nodes to remove and their descendants
+#     nodes_to_remove.update(all_descendants)
+
+#     # Remove the nodes from the graph
+#     G.remove_nodes_from(nodes_to_remove)
+
+#     return G
+
+def calculate_distances_and_prune(G, root, max_distance):
+    # Initialize distances from the root
+    distances = {node: euclidean_distance(root, node) for node in G.nodes()}
+
+    # Find nodes to remove
+    nodes_to_remove = {node for node, dist in distances.items() if dist > max_distance}
+
+    # Also remove all descendants of the nodes to be removed
+    # all_descendants = set()
+    # for node in nodes_to_remove:
+    #     descendants = nx.descendants(G.to_directed(), node)
+    #     all_descendants.update(descendants)
+
+    # # Union of nodes to remove and their descendants
+    # nodes_to_remove.update(all_descendants)
+
+    # Remove the nodes from the graph
+    G.remove_nodes_from(nodes_to_remove)
+    connected_nodes = list(nx.bfs_tree(G, root))
+    nodes_to_remove = [node for node in G.nodes if node not in connected_nodes]
+    G.remove_nodes_from(nodes_to_remove)
+    # return G
 
 
 ###################################################################################

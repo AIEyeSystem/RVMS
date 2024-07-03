@@ -116,7 +116,17 @@ def optic_center(optic_mask):
     else:
         print('No contours found in the image.')
         return None
-
+def mask_circle(image, center, radius):
+    # Create a mask with the same dimensions as the image, initialized to zero
+    mask = np.zeros_like(image)
+    
+    # Draw a filled circle on the mask with the given center and radius
+    cv2.circle(mask, center, radius, (1,1,1), -1)
+    
+    # Apply the mask to the image
+    masked_image = cv2.bitwise_and(image, mask)
+    
+    return masked_image
 
 if __name__ == '__main__':
     

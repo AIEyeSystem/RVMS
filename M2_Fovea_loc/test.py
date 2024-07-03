@@ -3,9 +3,9 @@ import os
 import shutil
 import cv2
 import pandas as pd
-from models.model import Net,predict_fovea_location
+from models.model import Net,predict_fovea_location,show_single_box
 
-def fovea_centre(model,img_result_path,loc_result_path,fundus_path,device):
+def fovea_centre(img_result_path,loc_result_path,fundus_path,device):
     if os.path.exists(img_result_path+'.ipynb_checkpoints'):
         shutil.rmtree(img_result_path+'.ipynb_checkpoints')   
     if os.path.exists(loc_result_path+'.ipynb_checkpoints'):
@@ -61,45 +61,22 @@ if __name__ == '__main__':
         model=model.to(device)  
     
     # ## infer
-    # img = cv2.imread('tt.jpg')
+    # img = cv2.imread('8_left.jpg')
+    from PIL import Image
+    import torchvision.transforms.functional as TF
+    import torch.nn as nn
+    import torch.nn.functional as F
+    import torchvision.transforms.functional as tv_F
+    img = Image.open('8_left.jpg') #PIL Image
+    img_resized = img.resize((256,256))
+    img_tensor = TF.to_tensor(img_resized)
 
-    # results = model.predict(source=img)
+    with torch.no_grad():
+        results = model.predict(source=img_resized)
 
-    # # print(results[0])
-    # for box in results[0].boxes:
-    #     if box.cls == 1:
-    #         cx,cy = box.xywhn[0],box.xywhn[1]
-    
-    img_result_path = '../Results/M2/Fovea/raw/'
-    loc_result_path = '../Results/M2/Fovea/'
-    fundus_path = '../Results/M1/Good_quality/'
-    # fundus_path = '../images/'
-    cx,cy = fovea_centre(model,img_result_path,loc_result_path,fundus_path,device)
-        
-    # import cv2  
-    # import matplotlib.pyplot as plt  
-    # image = cv2.imread('../images/8_left.jpg')
-    # # print(image.shape)
-    # # cv2.imshow("image",image)
-    # # cv2.waitKey(0)
-    # # plt.imshow(image)
-    # # plt.show()
-    # # Specify the center point (x, y) for the circle
-    # center_coordinates = (int(cx*512), int(cy*512))
-    # print(center_coordinates)
-    # # Specify the radius of the circle
-    # radius = 50
-
-    # # Define color and thickness for the circle
-    # color = (0, 255, 0)  # Green in BGR
-    # thickness = 2
-
-    # # Draw the circle on the image
-    # image_with_circle = cv2.circle(image, center_coordinates, radius, color, thickness)
-
-    # print("show image")
-    # # Display the image with the circle
-    # cv2.imshow('Image with Circle', image_with_circle)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
-    
+        # print(results[0])
+        for box in results[0].boxes:
+            if box.cls == 2:
+                cx,cy = box.xywhn[0][0],box.xywhn[0][1]
+                break
+    show_single_box(img_tensor,(cx,cy),'./r.png')
